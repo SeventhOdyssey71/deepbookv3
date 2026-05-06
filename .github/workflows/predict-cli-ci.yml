@@ -1,0 +1,40 @@
+name: predict-cli CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "predict-cli/**"
+      - ".github/workflows/predict-cli-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "predict-cli/**"
+      - ".github/workflows/predict-cli-ci.yml"
+
+concurrency:
+  group: predict-cli-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    working-directory: predict-cli
+
+jobs:
+  check:
+    name: fmt + clippy + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: predict-cli -> target
+      - run: cargo fmt --check
+      - run: cargo clippy -- -D warnings
+      - run: cargo test

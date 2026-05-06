@@ -1,0 +1,164 @@
+name: predict-cli release
+
+# Triggered by tags namespaced for the CLI: e.g. `predict-cli-v0.2.0`.
+# Builds cross-platform binaries, packages them, and attaches them to a
+# GitHub Release. Optional crates.io publish runs only when the
+# `CRATES_IO_TOKEN` secret is configured.
+
+on:
+  push:
+    tags:
+      - "predict-cli-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. predict-cli-v0.2.0). Must already exist."
+        required: true
+
+env:
+  CARGO_TERM_COLOR: always
+  BIN_NAME: predict-cli
+
+defaults:
+  run:
+    working-directory: predict-cli
+
+jobs:
+  ci-gate:
+    name: ci-gate (fmt + clippy + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: predict-cli -> target
+      - run: cargo fmt --check
+      - run: cargo clippy -- -D warnings
+      - run: cargo test
+
+  build:
+    name: build ${{ matrix.target }}
+    needs: ci-gate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-14
+            archive: tar.gz
+          - target: x86_64-apple-darwin
+            os: macos-13
+            archive: tar.gz
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            archive: tar.gz
+            musl: true
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: predict-cli -> target
+          key: ${{ matrix.target }}
+
+      - name: Install musl tools
+        if: matrix.musl == true
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build
+        shell: bash
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          ref="${{ github.event.inputs.tag || github.ref_name }}"
+          version="${ref#predict-cli-}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "stem=${BIN_NAME}-${version}-${{ matrix.target }}" >> "$GITHUB_OUTPUT"
+
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          stem="${{ steps.ver.outputs.stem }}"
+          mkdir -p "dist/${stem}"
+          cp "target/${{ matrix.target }}/release/${BIN_NAME}" "dist/${stem}/"
+          cp README.md "dist/${stem}/"
+          tar -czf "dist/${stem}.tar.gz" -C dist "${stem}"
+          (cd dist && shasum -a 256 "${stem}.tar.gz" > "${stem}.tar.gz.sha256")
+
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $stem = "${{ steps.ver.outputs.stem }}"
+          New-Item -ItemType Directory -Force -Path "dist/$stem" | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/${env:BIN_NAME}.exe" "dist/$stem/"
+          Copy-Item "README.md" "dist/$stem/"
+          Compress-Archive -Path "dist/$stem/*" -DestinationPath "dist/$stem.zip"
+          $hash = (Get-FileHash "dist/$stem.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $stem.zip" | Out-File -Encoding ascii "dist/$stem.zip.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.ver.outputs.stem }}
+          path: |
+            predict-cli/dist/${{ steps.ver.outputs.stem }}.tar.gz
+            predict-cli/dist/${{ steps.ver.outputs.stem }}.tar.gz.sha256
+            predict-cli/dist/${{ steps.ver.outputs.stem }}.zip
+            predict-cli/dist/${{ steps.ver.outputs.stem }}.zip.sha256
+          if-no-files-found: ignore
+
+  release:
+    name: github release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Resolve tag
+        id: tag
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          files: artifacts/*
+
+  crates-io:
+    name: publish crates.io
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Publish (skipped if CRATES_IO_TOKEN unset)
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          if [ -z "${CRATES_IO_TOKEN:-}" ]; then
+            echo "CRATES_IO_TOKEN not set — skipping crates.io publish."
+            exit 0
+          fi
+          cargo publish --token "$CRATES_IO_TOKEN"
