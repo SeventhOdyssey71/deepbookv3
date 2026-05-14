@@ -5,7 +5,7 @@ use owo_colors::OwoColorize;
 
 use crate::config::{PREDICT_PACKAGE, QUOTE_TYPE};
 use crate::format::{fmt_usd, label};
-use crate::rpc::{pluck, Rpc};
+use crate::rpc::Rpc;
 use crate::server;
 use crate::sui_cli;
 
@@ -39,20 +39,19 @@ pub async fn run(create: bool, json: bool) -> Result<()> {
         println!("  {} {}", label("manager id"), m.manager_id);
         println!("  {} {}", label("created at"), m.checkpoint_timestamp_ms);
 
-        // Fetch DUSDC balance held inside the manager.
-        if let Ok(obj) = rpc.get_object(&m.manager_id).await {
-            if let Some(_owner) = pluck(&obj, &["data", "content", "fields", "owner"]) {
-                let dusdc = rpc
-                    .get_balance(&m.manager_id, Some(QUOTE_TYPE))
-                    .await
-                    .unwrap_or(0);
-                println!(
-                    "  {} {} (held inside manager BalanceManager)",
-                    label("dusdc"),
-                    fmt_usd((dusdc as f64) / 1_000_000.0)
-                );
-            }
-        }
+        // DUSDC balance is held in a dynamic field on the inner BalanceManager.
+        // `suix_getBalance(manager_id)` returns 0 because the manager is a
+        // shared object, not an address holding coins. Read the inner BM's
+        // balance bag instead.
+        let dusdc = rpc
+            .get_manager_inner_balance(&m.manager_id, QUOTE_TYPE)
+            .await
+            .unwrap_or(0);
+        println!(
+            "  {} {} (held inside manager BalanceManager)",
+            label("dusdc"),
+            fmt_usd((dusdc as f64) / 1_000_000.0)
+        );
         // Wallet DUSDC balance.
         if let Ok(b) = rpc.get_balance(&addr, Some(QUOTE_TYPE)).await {
             println!(

@@ -55,6 +55,78 @@ impl Rpc {
         .await
     }
 
+    /// List dynamic fields on `parent_id`. Returns `data` array verbatim.
+    pub async fn get_dynamic_fields(&self, parent_id: &str) -> Result<Value> {
+        self.call(
+            "suix_getDynamicFields",
+            json!([parent_id, Value::Null, 50]),
+        )
+        .await
+    }
+
+    /// Read the DUSDC balance held inside the manager's inner BalanceManager.
+    ///
+    /// PredictManager.balance_manager.balances is a Bag whose single entry
+    /// is `BalanceKey<DUSDC> -> Balance<DUSDC>`. We read the bag's dynamic
+    /// fields, find the entry whose value type is Balance<coin_type>, and
+    /// pull `content.fields.value` (the balance as microUSDC).
+    pub async fn get_manager_inner_balance(
+        &self,
+        manager_id: &str,
+        coin_type: &str,
+    ) -> Result<u64> {
+        let obj = self.get_object(manager_id).await?;
+        let balances_bag = pluck(
+            &obj,
+            &[
+                "data",
+                "content",
+                "fields",
+                "balance_manager",
+                "fields",
+                "balances",
+                "fields",
+                "id",
+                "id",
+            ],
+        )
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("manager: balances bag id not found"))?;
+
+        let dfs = self.get_dynamic_fields(balances_bag).await?;
+        let items = dfs
+            .get("data")
+            .and_then(|d| d.as_array())
+            .ok_or_else(|| anyhow!("dynamic fields: missing data"))?;
+
+        let needle = format!("::balance::Balance<{}>", coin_type);
+        for item in items {
+            // objectType on the field looks like
+            //   ...::dynamic_field::Field<BalanceKey<COIN>, Balance<COIN>>
+            // We want the Balance<coin_type> entry.
+            let ot = item
+                .get("objectType")
+                .and_then(|s| s.as_str())
+                .unwrap_or("");
+            if !ot.contains(&needle) {
+                continue;
+            }
+            let field_id = item
+                .get("objectId")
+                .and_then(|s| s.as_str())
+                .ok_or_else(|| anyhow!("dynamic field: missing objectId"))?;
+            let field_obj = self.get_object(field_id).await?;
+            let val = pluck(
+                &field_obj,
+                &["data", "content", "fields", "value"],
+            )
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("dynamic field: missing value"))?;
+            return Ok(val.parse::<u64>()?);
+        }
+        Ok(0)
+    }
+
     pub async fn get_balance(&self, owner: &str, coin_type: Option<&str>) -> Result<u128> {
         let params = match coin_type {
             Some(t) => json!([owner, t]),

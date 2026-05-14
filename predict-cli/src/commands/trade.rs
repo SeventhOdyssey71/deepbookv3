@@ -286,6 +286,68 @@ pub async fn deposit(amount_usdc: f64) -> Result<()> {
     Ok(())
 }
 
+/* ------------------------------------------------------- manager-withdraw */
+
+/// Withdraw DUSDC from the manager's inner BalanceManager back to the
+/// connected wallet. If `amount` is None, withdraws the full inner balance.
+///
+/// The Move function `predict_manager::withdraw<T>(&mut manager, amount, ctx)
+/// -> Coin<T>` asserts `ctx.sender() == manager.owner`. The PTB then
+/// transfers the returned coin to the active address.
+pub async fn manager_withdraw(amount: Option<f64>) -> Result<()> {
+    sui_cli::check()?;
+    let manager = require_manager().await?;
+    let addr = sui_cli::active_address()?;
+    let rpc = Rpc::new();
+
+    let inner = rpc
+        .get_manager_inner_balance(&manager, QUOTE_TYPE)
+        .await?;
+    if inner == 0 {
+        bail!("manager DUSDC balance is 0 — nothing to withdraw");
+    }
+
+    let micro: u64 = match amount {
+        None => inner,
+        Some(v) => {
+            validate_pos("--amount", v)?;
+            let m = to_quote("--amount", v)?;
+            if m > inner {
+                bail!(
+                    "requested {} but manager only holds {}",
+                    fmt_usd(v),
+                    fmt_usd((inner as f64) / 1_000_000.0)
+                );
+            }
+            m
+        }
+    };
+
+    println!(
+        "Withdrawing {} from manager {} -> wallet {}…",
+        fmt_usd((micro as f64) / 1_000_000.0).bold(),
+        label(&manager),
+        label(&addr)
+    );
+
+    let args = vec![
+        "--move-call".into(),
+        format!("{PREDICT_PACKAGE}::predict_manager::withdraw"),
+        type_arg(QUOTE_TYPE),
+        format!("@{manager}"),
+        format!("{micro}"),
+        "--assign".into(),
+        "coin".into(),
+        "--transfer-objects".into(),
+        "[coin]".into(),
+        format!("@{addr}"),
+    ];
+    let out = sui_cli::run_ptb(args, DEFAULT_GAS_BUDGET)?;
+    let digest = parse_digest(&out).unwrap_or_else(|| "(unknown)".into());
+    println!("  ✓ tx {digest}");
+    Ok(())
+}
+
 /* ---------------------------------------------------------------- mint binary */
 
 pub struct MintBinary {

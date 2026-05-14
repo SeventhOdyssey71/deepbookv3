@@ -167,6 +167,14 @@ enum Cmd {
         plp: String,
     },
 
+    /// Withdraw DUSDC from your PredictManager balance back to your wallet.
+    /// Omit --amount to withdraw the full free balance.
+    ManagerWithdraw {
+        /// Amount of DUSDC to pull back (e.g. 100 for $100). Default: all.
+        #[arg(long)]
+        amount: Option<f64>,
+    },
+
     /// How to get DUSDC + SUI for testnet.
     Faucet,
 
@@ -286,6 +294,7 @@ async fn main() -> Result<()> {
         }
         Cmd::Supply { amount } => commands::trade::supply(amount).await,
         Cmd::Withdraw { plp } => commands::trade::withdraw(&plp).await,
+        Cmd::ManagerWithdraw { amount } => commands::trade::manager_withdraw(amount).await,
         Cmd::Faucet => commands::faucet::run().await,
         Cmd::Doctor => commands::doctor::run().await,
     }
