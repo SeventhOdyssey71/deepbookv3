@@ -74,11 +74,7 @@ pub async fn run(args: Args) -> Result<()> {
             (
                 "binary",
                 p,
-                format!(
-                    "{} ${}",
-                    if is_up { "ABOVE" } else { "BELOW" },
-                    strike,
-                ),
+                format!("{} ${}", if is_up { "ABOVE" } else { "BELOW" }, strike,),
             )
         }
         (_, Some(lo), Some(hi)) if hi > lo => {
@@ -87,7 +83,13 @@ pub async fn run(args: Args) -> Result<()> {
             let p = if let Some(s) = market.settlement {
                 settled_range_price(s, lo_scaled, hi_scaled, FLOAT_SCALING as f64)
             } else {
-                range_price(market.forward, lo_scaled, hi_scaled, FLOAT_SCALING as f64, market.svi)
+                range_price(
+                    market.forward,
+                    lo_scaled,
+                    hi_scaled,
+                    FLOAT_SCALING as f64,
+                    market.svi,
+                )
             };
             ("range", p, format!("${}–${}", lo, hi))
         }
@@ -96,7 +98,13 @@ pub async fn run(args: Args) -> Result<()> {
             let p = if let Some(s) = market.settlement {
                 settled_range_price(s, lo_scaled, POS_INF, FLOAT_SCALING as f64)
             } else {
-                range_price(market.forward, lo_scaled, POS_INF, FLOAT_SCALING as f64, market.svi)
+                range_price(
+                    market.forward,
+                    lo_scaled,
+                    POS_INF,
+                    FLOAT_SCALING as f64,
+                    market.svi,
+                )
             };
             ("range", p, format!("ABOVE ${}", lo))
         }
@@ -105,7 +113,13 @@ pub async fn run(args: Args) -> Result<()> {
             let p = if let Some(s) = market.settlement {
                 settled_range_price(s, NEG_INF, hi_scaled, FLOAT_SCALING as f64)
             } else {
-                range_price(market.forward, NEG_INF, hi_scaled, FLOAT_SCALING as f64, market.svi)
+                range_price(
+                    market.forward,
+                    NEG_INF,
+                    hi_scaled,
+                    FLOAT_SCALING as f64,
+                    market.svi,
+                )
             };
             ("range", p, format!("BELOW ${}", hi))
         }

@@ -47,10 +47,13 @@ pub async fn run(json: bool) -> Result<()> {
 
     // Total PLP supply lives inside the TreasuryCap field — serialization
     // shape varies, so reach for `total_supply` if present.
-    let plp_supply = pluck(fields, &["treasury_cap", "fields", "total_supply", "fields", "value"])
-        .and_then(|v| v.as_str())
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(0);
+    let plp_supply = pluck(
+        fields,
+        &["treasury_cap", "fields", "total_supply", "fields", "value"],
+    )
+    .and_then(|v| v.as_str())
+    .and_then(|s| s.parse::<u64>().ok())
+    .unwrap_or(0);
 
     let div = 10f64.powi(QUOTE_DECIMALS as i32);
     let idle_f = (idle as f64) / div;
@@ -70,7 +73,12 @@ pub async fn run(json: bool) -> Result<()> {
     println!();
     println!("  {} {}", label("idle balance"), fmt_usd(idle_f));
     println!("  {} {}", label("allocated capital"), fmt_usd(allocated_f));
-    println!("  {} {} ({:.2}%)", label("utilization"), fmt_usd(allocated_f), util_pct);
+    println!(
+        "  {} {} ({:.2}%)",
+        label("utilization"),
+        fmt_usd(allocated_f),
+        util_pct
+    );
     println!();
     println!("  {} {}", label("active markets"), active);
     println!("  {} {} units", label("plp supply"), plp_supply);

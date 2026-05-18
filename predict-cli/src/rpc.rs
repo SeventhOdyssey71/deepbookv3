@@ -57,11 +57,8 @@ impl Rpc {
 
     /// List dynamic fields on `parent_id`. Returns `data` array verbatim.
     pub async fn get_dynamic_fields(&self, parent_id: &str) -> Result<Value> {
-        self.call(
-            "suix_getDynamicFields",
-            json!([parent_id, Value::Null, 50]),
-        )
-        .await
+        self.call("suix_getDynamicFields", json!([parent_id, Value::Null, 50]))
+            .await
     }
 
     /// Read the DUSDC balance held inside the manager's inner BalanceManager.
@@ -116,12 +113,9 @@ impl Rpc {
                 .and_then(|s| s.as_str())
                 .ok_or_else(|| anyhow!("dynamic field: missing objectId"))?;
             let field_obj = self.get_object(field_id).await?;
-            let val = pluck(
-                &field_obj,
-                &["data", "content", "fields", "value"],
-            )
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow!("dynamic field: missing value"))?;
+            let val = pluck(&field_obj, &["data", "content", "fields", "value"])
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("dynamic field: missing value"))?;
             return Ok(val.parse::<u64>()?);
         }
         Ok(0)

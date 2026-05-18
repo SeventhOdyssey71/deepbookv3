@@ -16,9 +16,8 @@ use owo_colors::OwoColorize;
 
 use crate::commands::manager::parse_digest;
 use crate::config::{
-    is_v2_deploy_pending, CLOCK_ID, FLOAT_SCALING, NEG_INF, POOL_VAULT, POS_INF,
-    PREDICT_PACKAGE, PROTOCOL_CONFIG, PYTH_SOURCE_BTC, PYTH_SOURCE_ETH, PYTH_SOURCE_SUI,
-    QUOTE_DECIMALS, QUOTE_TYPE,
+    is_v2_deploy_pending, CLOCK_ID, FLOAT_SCALING, NEG_INF, POOL_VAULT, POS_INF, PREDICT_PACKAGE,
+    PROTOCOL_CONFIG, PYTH_SOURCE_BTC, PYTH_SOURCE_ETH, PYTH_SOURCE_SUI, QUOTE_DECIMALS, QUOTE_TYPE,
 };
 use crate::format::{fmt_usd, label, to_quote, to_scaled};
 use crate::pricing::{binary_price, range_price, SviParams};
@@ -544,13 +543,7 @@ pub async fn mint_range(args: MintRange) -> Result<()> {
     assert_mintable_market(&args.oracle_id, market)?;
     let lo_s = strike_scaled("--lower", args.lower)?;
     let hi_s = strike_scaled("--upper", args.upper)?;
-    let fair = range_price(
-        market.forward,
-        lo_s,
-        hi_s,
-        FLOAT_SCALING as f64,
-        market.svi,
-    );
+    let fair = range_price(market.forward, lo_s, hi_s, FLOAT_SCALING as f64, market.svi);
 
     let manager_existing = manager_dusdc_balance(&manager).await;
     print_spend_preview(
@@ -785,10 +778,7 @@ pub async fn supply(amount_usdc: f64) -> Result<()> {
     let coin = pick_funding_coin(micro).await?;
     let addr = sui_cli::active_address()?;
 
-    println!(
-        "Supplying {} to the PLP pool…",
-        fmt_usd(amount_usdc).bold()
-    );
+    println!("Supplying {} to the PLP pool…", fmt_usd(amount_usdc).bold());
     let markets = enumerate_active_markets().await?;
     println!(
         "  Valuating across {} active expiry markets…",
