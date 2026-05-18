@@ -6,21 +6,11 @@ use serde::Deserialize;
 
 use crate::config;
 
-#[derive(Debug, Clone, Deserialize, serde::Serialize)]
-pub struct ServerOracle {
-    pub predict_id: String,
-    pub oracle_id: String,
-    pub oracle_cap_id: String,
-    pub underlying_asset: String,
-    pub expiry: u64,
-    pub min_strike: u64,
-    pub tick_size: u64,
-    pub status: String,
-    pub settlement_price: Option<u64>,
-    pub settled_at: Option<u64>,
-    pub activated_at: Option<u64>,
-    pub created_checkpoint: Option<u64>,
-}
+// v2 sources the oracle/expiry-market list on-chain via `predict-cli list`,
+// so the predict-server `/oracles` response shape is no longer wired into
+// the CLI. The PredictManager lookup remains a server call because the
+// `PredictManagerCreated` event index is the only easy way to recover a
+// user's manager from their address.
 
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
 pub struct ServerManager {
@@ -29,15 +19,6 @@ pub struct ServerManager {
     pub digest: String,
     pub checkpoint: u64,
     pub checkpoint_timestamp_ms: u64,
-}
-
-pub async fn list_oracles() -> Result<Vec<ServerOracle>> {
-    let url = format!("{}/oracles", config::predict_server());
-    let res = reqwest::get(&url)
-        .await?
-        .json::<Vec<ServerOracle>>()
-        .await?;
-    Ok(res)
 }
 
 pub async fn list_managers() -> Result<Vec<ServerManager>> {

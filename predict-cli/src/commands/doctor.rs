@@ -5,7 +5,7 @@ use std::process::Command;
 use anyhow::Result;
 use owo_colors::OwoColorize;
 
-use crate::config::QUOTE_TYPE;
+use crate::config::{is_v2_deploy_pending, QUOTE_TYPE};
 use crate::format::fmt_usd;
 use crate::rpc::Rpc;
 use crate::server;
@@ -34,6 +34,8 @@ pub async fn run() -> Result<()> {
     println!();
 
     let mut checks: Vec<Check> = Vec::new();
+
+    checks.push(check_v2_deploy_status());
 
     let sui_installed = check_sui_installed();
     let have_sui = matches!(sui_installed.status, Status::Ok);
@@ -99,6 +101,26 @@ pub async fn run() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Surface unresolved v2 deploy placeholders as a warning so users know why
+/// mint/redeem will fail before they try to submit a transaction.
+fn check_v2_deploy_status() -> Check {
+    if is_v2_deploy_pending() {
+        Check {
+            name: "predict v2 deploy",
+            status: Status::Warn,
+            detail: "config.rs has TODO_V2 placeholders for the v2 package + shared objects".into(),
+            next: Some("See predict-cli/MIGRATION.md for the upgrade plan.".into()),
+        }
+    } else {
+        Check {
+            name: "predict v2 deploy",
+            status: Status::Ok,
+            detail: "v2 package and shared object IDs are populated".into(),
+            next: None,
+        }
+    }
 }
 
 fn skipped(name: &'static str, why: &str) -> Check {
